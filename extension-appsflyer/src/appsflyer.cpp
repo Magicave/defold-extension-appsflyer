@@ -94,6 +94,60 @@ static int Lua_LogEvent(lua_State* L)
     return 0;
 }
 
+static int Lua_LogAdRevenue(lua_State* L)
+{
+    DM_LUA_STACK_CHECK(L, 0);
+
+    // Args: 1=MonetizationNet, 2=MediationNet, 3=Currency, 4=Revenue, 5=AdditionalParams(Table, optional)
+    const char* monetizationNetwork = luaL_checkstring(L, 1);
+    const char* mediationNetwork = luaL_checkstring(L, 2);
+    const char* currency = luaL_checkstring(L, 3);
+    double revenue = luaL_checknumber(L, 4);
+
+    // Parse optional additional parameters table
+    if (lua_type(L, 5) == LUA_TTABLE)
+    {
+        lua_pushvalue(L, 5);
+        lua_pushnil(L);
+
+        while (lua_next(L, -2) != 0)
+        {
+            TrackData data;
+            const char* k = lua_tostring(L, -2);
+            const char* s = lua_tostring(L, -1);
+            if (!s)
+            {
+                char msg[256];
+                snprintf(msg, sizeof(msg), "Wrong type for table attribute '%s'. Expected string, got %s", lua_tostring(L, -2), luaL_typename(L, -1) );
+                luaL_error(L, msg);
+                return 0;
+            }
+            data.key = strdup(k);
+            data.value = strdup(s);
+            if(list.Full())
+            {
+                list.OffsetCapacity(2);
+            }
+            list.Push(data);
+            lua_pop(L, 1);
+        }
+        lua_pop(L, 1);
+    }
+
+    // Call the platform specific function
+    LogAdRevenue(monetizationNetwork, mediationNetwork, currency, revenue, &list);
+
+    // Clean up memory
+    for(int i = list.Size() - 1; i >= 0; --i)
+    {
+        free(list[i].key);
+        free(list[i].value);
+        list.EraseSwap(i);
+    }
+
+    return 0;
+}
+
 static int Lua_SetCustomerUserId(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 0);
@@ -108,6 +162,7 @@ static const luaL_reg Module_methods[] =
     {"set_callback", Lua_SetCallback},
     {"set_debug_log", Lua_SetDebugLog},
     {"log_event", Lua_LogEvent},
+    {"log_ad_revenue", Lua_LogAdRevenue},
     {"set_customer_user_id", Lua_SetCustomerUserId},
     {"get_appsflyer_uid", Lua_GetAppsFlyerUID},
     {0, 0}

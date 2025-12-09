@@ -22,6 +22,7 @@ struct Appsflyer
     jmethodID       m_StartSDK;
     jmethodID       m_SetDebugLog;
     jmethodID       m_LogEvent;
+    jmethodID       m_LogAdRevenue; 
     jmethodID       m_SetCustomerUserId;
     jmethodID       m_GetAppsFlyerUID;
 };
@@ -44,6 +45,10 @@ static void InitJNIMethods(JNIEnv* env, jclass cls)
     g_appsflyer.m_StartSDK = env->GetMethodID(cls, "startSDK", "()V");
     g_appsflyer.m_SetDebugLog = env->GetMethodID(cls, "setDebugLog", "(Z)V");
     g_appsflyer.m_LogEvent = env->GetMethodID(cls, "logEvent", "(Ljava/lang/String;Ljava/util/Map;)V");
+    
+    // Signature: String, String, String, double, Map -> Void
+    g_appsflyer.m_LogAdRevenue = env->GetMethodID(cls, "logAdRevenue", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;DLjava/util/Map;)V");
+
     g_appsflyer.m_SetCustomerUserId = env->GetMethodID(cls, "setCustomerUserId", "(Ljava/lang/String;)V");
     g_appsflyer.m_GetAppsFlyerUID = env->GetMethodID(cls, "getAppsFlyerUID", "()Ljava/lang/String;");
 }
@@ -121,6 +126,56 @@ void LogEvent(const char* eventName, dmArray<TrackData>* trackData)
     env->DeleteLocalRef(hashMapClass);
     env->DeleteLocalRef(hashMapObj);
     env->DeleteLocalRef(jEventName);
+}
+
+void LogAdRevenue(const char* monetizationNetwork, const char* mediationNetwork, const char* currencyIso4217Code, double eventRevenue, dmArray<TrackData>* trackData)
+{
+    dmAndroid::ThreadAttacher threadAttacher;
+    JNIEnv* env = threadAttacher.GetEnv();
+
+    // Convert C strings to Java Strings
+    jstring jMonetization = env->NewStringUTF(monetizationNetwork);
+    jstring jMediation = env->NewStringUTF(mediationNetwork);
+    jstring jCurrency = env->NewStringUTF(currencyIso4217Code);
+
+    // Prepare HashMap for additional parameters
+    jobject hashMapObj = NULL;
+    jclass hashMapClass = NULL;
+
+    if (trackData != NULL && trackData->Size() > 0)
+    {
+        hashMapClass = env->FindClass("java/util/HashMap");
+        jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "(I)V");
+        hashMapObj = env->NewObject(hashMapClass, hashMapInit, trackData->Size());
+        jmethodID hashMapId = env->GetMethodID(hashMapClass, "put","(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+
+        TrackData data;
+        jstring key, value;
+        for(uint32_t i = 0; i != trackData->Size(); i++)
+        {
+            data = (*trackData)[i];
+            key = env->NewStringUTF(data.key);
+            value = env->NewStringUTF(data.value);
+            env->CallObjectMethod(hashMapObj, hashMapId, key, value);
+
+            env->DeleteLocalRef(key);
+            env->DeleteLocalRef(value);
+        }
+    }
+
+    // Call the Java method
+    env->CallVoidMethod(g_appsflyer.m_AppsflyerJNI, g_appsflyer.m_LogAdRevenue, jMonetization, jMediation, jCurrency, eventRevenue, hashMapObj);
+
+    // Cleanup
+    env->DeleteLocalRef(jMonetization);
+    env->DeleteLocalRef(jMediation);
+    env->DeleteLocalRef(jCurrency);
+    if (hashMapObj != NULL) {
+        env->DeleteLocalRef(hashMapObj);
+    }
+    if (hashMapClass != NULL) {
+        env->DeleteLocalRef(hashMapClass);
+    }
 }
 
 void SetCustomerUserId(const char* userId)

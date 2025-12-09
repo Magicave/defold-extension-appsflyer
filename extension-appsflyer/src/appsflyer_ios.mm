@@ -39,7 +39,7 @@ void Finalize_Ext(){
 
 
 void InitializeSDK(const char* key, const char* appleAppID){
-              NSLog(@"AppsFlyer InitializeSDK");
+             NSLog(@"AppsFlyer InitializeSDK");
   [AppsFlyerLib shared].isDebug = true;
   DEFAFSDKDelegate *delegate = [[DEFAFSDKDelegate alloc] init];
   [AppsFlyerAttribution shared].isBridgeReady = YES;
@@ -75,6 +75,47 @@ void LogEvent(const char* eventName, dmArray<TrackData>* trackData){
     }
     [[AppsFlyerLib shared] logEvent: event withValues: newDict];
   }
+}
+
+void LogAdRevenue(const char* monetizationNetwork, const char* mediationNetwork, const char* currencyIso4217Code, double eventRevenue, dmArray<TrackData>* trackData){
+    @autoreleasepool {
+        // Map String Mediation Network to AppsFlyer Enum
+        // Default to GoogleAdMob as per your requirements
+        AppsFlyerAdRevenueMediationNetworkType mediationType = AppsFlyerAdRevenueMediationNetworkTypeGoogleAdMob;
+        NSString* medNetStr = [NSString stringWithUTF8String:mediationNetwork];
+
+        if ([medNetStr caseInsensitiveCompare:@"ironsource"] == NSOrderedSame) {
+            mediationType = AppsFlyerAdRevenueMediationNetworkTypeIronSource;
+        } else if ([medNetStr caseInsensitiveCompare:@"applovin"] == NSOrderedSame) {
+            mediationType = AppsFlyerAdRevenueMediationNetworkTypeApplovin;
+        } else if ([medNetStr caseInsensitiveCompare:@"unity"] == NSOrderedSame) {
+            mediationType = AppsFlyerAdRevenueMediationNetworkTypeUnity;
+        }
+        
+        // Create Revenue Data Object
+        AFAdRevenueData *revenueData = [[AFAdRevenueData alloc]
+                                        initWithMonetizationNetwork:[NSString stringWithUTF8String:monetizationNetwork]
+                                        mediationNetwork:mediationType
+                                        currencyIso4217Code:[NSString stringWithUTF8String:currencyIso4217Code]
+                                        eventRevenue:@(eventRevenue)];
+
+        // Process Additional Parameters (Dictionary)
+        NSMutableDictionary* additionalParams = nil;
+        if (trackData != NULL && trackData->Size() > 0) {
+            additionalParams = [NSMutableDictionary dictionary];
+            TrackData data;
+            for(uint32_t i = 0; i != trackData->Size(); i++)
+            {
+                data = (*trackData)[i];
+                NSString* key = [NSString stringWithUTF8String: data.key];
+                NSString* value = [NSString stringWithUTF8String: data.value];
+                additionalParams[key] = value;
+            }
+        }
+
+        // Send to AppsFlyer
+        [[AppsFlyerLib shared] logAdRevenue:revenueData additionalParameters:additionalParams];
+    }
 }
 
 void SetCustomerUserId(const char* userId){

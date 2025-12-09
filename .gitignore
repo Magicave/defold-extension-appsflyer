@@ -10,3 +10,5 @@ builtins
 .internal
 .idea
 debug.keystore*
+/.vscode/
+/debugger/

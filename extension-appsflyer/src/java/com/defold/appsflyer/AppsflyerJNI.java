@@ -5,6 +5,8 @@ import android.app.Activity;
 
 import com.appsflyer.AppsFlyerConversionListener;
 import com.appsflyer.AppsFlyerLib;
+import com.appsflyer.AFAdRevenueData;
+import com.appsflyer.MediationNetwork;
 
 import java.util.Map;
 
@@ -84,6 +86,31 @@ public class AppsflyerJNI {
     public void logEvent(String eventName, Map<String, Object> eventValue) {
         Log.d(TAG, "Log event: " + eventName);
         AppsFlyerLib.getInstance().logEvent(activity, eventName, eventValue);
+    }
+
+    public void logAdRevenue(String monetizationNetwork, String mediationNetworkStr, String currencyIso4217Code, double eventRevenue, Map<String, Object> additionalParameters) {
+        Log.d(TAG, "logAdRevenue: " + eventRevenue + " " + currencyIso4217Code);
+
+        // Map String input to MediationNetwork Enum
+        // Defaulting to AdMob as that is your primary use case, but logic exists for others
+        MediationNetwork mediationNetwork = MediationNetwork.GOOGLE_ADMOB;
+        
+        if ("ironsource".equalsIgnoreCase(mediationNetworkStr)) {
+            mediationNetwork = MediationNetwork.IRONSOURCE;
+        } else if ("applovin".equalsIgnoreCase(mediationNetworkStr)) {
+            mediationNetwork = MediationNetwork.APPLOVIN_MAX;
+        } else if ("unity".equalsIgnoreCase(mediationNetworkStr)) {
+            mediationNetwork = MediationNetwork.UNITY;
+        }
+        
+        AFAdRevenueData adRevenueData = new AFAdRevenueData(
+            monetizationNetwork,
+            mediationNetwork,
+            currencyIso4217Code,
+            eventRevenue
+        );
+
+        AppsFlyerLib.getInstance().logAdRevenue(adRevenueData, additionalParameters);
     }
 
     public void setCustomerUserId(String userId) {
