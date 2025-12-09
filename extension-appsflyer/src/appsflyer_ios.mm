@@ -77,44 +77,34 @@ void LogEvent(const char* eventName, dmArray<TrackData>* trackData){
   }
 }
 
+
+// Fixing build errors by using manual dictionary creation instead of AFAdRevenueData
 void LogAdRevenue(const char* monetizationNetwork, const char* mediationNetwork, const char* currencyIso4217Code, double eventRevenue, dmArray<TrackData>* trackData){
     @autoreleasepool {
-        // Map String Mediation Network to AppsFlyer Enum
-        // Default to GoogleAdMob as per your requirements
-        AppsFlyerAdRevenueMediationNetworkType mediationType = AppsFlyerAdRevenueMediationNetworkTypeGoogleAdMob;
-        NSString* medNetStr = [NSString stringWithUTF8String:mediationNetwork];
+        NSMutableDictionary* revenueParams = [NSMutableDictionary dictionary];
 
-        if ([medNetStr caseInsensitiveCompare:@"ironsource"] == NSOrderedSame) {
-            mediationType = AppsFlyerAdRevenueMediationNetworkTypeIronSource;
-        } else if ([medNetStr caseInsensitiveCompare:@"applovin"] == NSOrderedSame) {
-            mediationType = AppsFlyerAdRevenueMediationNetworkTypeApplovin;
-        } else if ([medNetStr caseInsensitiveCompare:@"unity"] == NSOrderedSame) {
-            mediationType = AppsFlyerAdRevenueMediationNetworkTypeUnity;
-        }
-        
-        // Create Revenue Data Object
-        AFAdRevenueData *revenueData = [[AFAdRevenueData alloc]
-                                        initWithMonetizationNetwork:[NSString stringWithUTF8String:monetizationNetwork]
-                                        mediationNetwork:mediationType
-                                        currencyIso4217Code:[NSString stringWithUTF8String:currencyIso4217Code]
-                                        eventRevenue:@(eventRevenue)];
+        // Manually set the keys that AppsFlyer expects for Ad Revenue
+        // These match the keys we used in the Android fix
+        [revenueParams setValue:@"RewardedVideo" forKey:@"af_adrev_ad_type"];
+        [revenueParams setValue:[NSString stringWithUTF8String:currencyIso4217Code] forKey:@"af_currency"];
+        [revenueParams setValue:@(eventRevenue) forKey:@"af_revenue"];
+        [revenueParams setValue:[NSString stringWithUTF8String:monetizationNetwork] forKey:@"af_adrev_network_name"];
+        [revenueParams setValue:[NSString stringWithUTF8String:mediationNetwork] forKey:@"af_adrev_mediation_network_name"];
 
-        // Process Additional Parameters (Dictionary)
-        NSMutableDictionary* additionalParams = nil;
+        // Add any additional parameters passed from Lua
         if (trackData != NULL && trackData->Size() > 0) {
-            additionalParams = [NSMutableDictionary dictionary];
             TrackData data;
             for(uint32_t i = 0; i != trackData->Size(); i++)
             {
                 data = (*trackData)[i];
                 NSString* key = [NSString stringWithUTF8String: data.key];
                 NSString* value = [NSString stringWithUTF8String: data.value];
-                additionalParams[key] = value;
+                revenueParams[key] = value;
             }
         }
 
-        // Send to AppsFlyer
-        [[AppsFlyerLib shared] logAdRevenue:revenueData additionalParameters:additionalParams];
+        // Send using the standard logEvent API with the reserved "af_ad_revenue" event name
+        [[AppsFlyerLib shared] logEvent:@"af_ad_revenue" withValues:revenueParams];
     }
 }
 
