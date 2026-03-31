@@ -18,18 +18,68 @@
 namespace dmAppsflyer {
 
 dmArray<TrackData> list;
+static char* g_Key = 0;
+static char* g_AppleAppID = 0;
+static bool g_SDKInitialized = false;
+static bool g_DebugLogConfigured = false;
+static bool g_DebugLogEnabled = false;
+
+static void StoreConfigValue(char** dst, const char* src)
+{
+    if (*dst != 0)
+    {
+        free(*dst);
+        *dst = 0;
+    }
+    if (src != 0)
+    {
+        *dst = strdup(src);
+    }
+}
+
+static bool EnsureSDKInitialized()
+{
+    if (g_SDKInitialized)
+    {
+        return true;
+    }
+
+    if (g_Key == 0 || g_Key[0] == '\0')
+    {
+        dmLogError("Unable to initialize AppsFlyer SDK: appsflyer.key is missing");
+        return false;
+    }
+
+    InitializeSDK(g_Key, g_AppleAppID != 0 ? g_AppleAppID : "");
+    g_SDKInitialized = true;
+
+    if (g_DebugLogConfigured)
+    {
+        SetDebugLog(g_DebugLogEnabled);
+    }
+
+    dmLogInfo("AppsFlyer SDK initialized lazily on first runtime use");
+    return true;
+}
 
 static int Lua_StartSDK(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 0);
-    StartSDK();
+    if (EnsureSDKInitialized())
+    {
+        StartSDK();
+    }
     return 0;
 }
 
 static int Lua_GetAppsFlyerUID(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 1);
-
+    if (!EnsureSDKInitialized())
+    {
+        lua_pushnil(L);
+        return 1;
+    }
     return GetAppsFlyerUID(L);
 }
 
@@ -44,13 +94,22 @@ static int Lua_SetDebugLog(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 0);
     bool is_enable = luaL_checkbool(L, 1);
-    SetDebugLog(is_enable);
+    g_DebugLogConfigured = true;
+    g_DebugLogEnabled = is_enable;
+    if (g_SDKInitialized)
+    {
+        SetDebugLog(is_enable);
+    }
     return 0;
 }
 
 static int Lua_LogEvent(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 0);
+    if (!EnsureSDKInitialized())
+    {
+        return 0;
+    }
 
     const char* eventName = luaL_checkstring(L, 1);
     if (lua_type(L, 2) == LUA_TTABLE)
@@ -97,6 +156,10 @@ static int Lua_LogEvent(lua_State* L)
 static int Lua_LogAdRevenue(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 0);
+    if (!EnsureSDKInitialized())
+    {
+        return 0;
+    }
 
     // Args: 1=MonetizationNet, 2=MediationNet, 3=Currency, 4=Revenue, 5=AdditionalParams(Table, optional)
     const char* monetizationNetwork = luaL_checkstring(L, 1);
@@ -151,6 +214,10 @@ static int Lua_LogAdRevenue(lua_State* L)
 static int Lua_SetCustomerUserId(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 0);
+    if (!EnsureSDKInitialized())
+    {
+        return 0;
+    }
     const char *customerUserId = luaL_checkstring(L, 1);
     SetCustomerUserId(customerUserId);
     return 0;
@@ -189,10 +256,8 @@ static dmExtension::Result AppInitializeAppsflyer(dmExtension::AppParams* params
     Initialize_Ext();
 
     int isDebug = dmConfigFile::GetInt(params->m_ConfigFile, "appsflyer.is_debug", 0);
-    if (isDebug > 0)
-    {
-        SetDebugLog(true);
-    }
+    g_DebugLogConfigured = true;
+    g_DebugLogEnabled = isDebug > 0;
 
     const char* key = dmConfigFile::GetString(params->m_ConfigFile, "appsflyer.key", 0);
     if (!key)
@@ -201,7 +266,9 @@ static dmExtension::Result AppInitializeAppsflyer(dmExtension::AppParams* params
     }
 
     const char* appleAppID = dmConfigFile::GetString(params->m_ConfigFile, "appsflyer.apple_app_id", "");
-    InitializeSDK(key, appleAppID);
+    StoreConfigValue(&g_Key, key);
+    StoreConfigValue(&g_AppleAppID, appleAppID);
+    dmLogInfo("AppsFlyer SDK bootstrap deferred until first runtime call");
     return dmExtension::RESULT_OK;
 }
 
@@ -220,6 +287,11 @@ static dmExtension::Result UpdateAppsflyer(dmExtension::Params* params)
 
 static dmExtension::Result AppFinalizeAppsflyer(dmExtension::AppParams* params)
 {
+    StoreConfigValue(&g_Key, 0);
+    StoreConfigValue(&g_AppleAppID, 0);
+    g_SDKInitialized = false;
+    g_DebugLogConfigured = false;
+    g_DebugLogEnabled = false;
     return dmExtension::RESULT_OK;
 }
 

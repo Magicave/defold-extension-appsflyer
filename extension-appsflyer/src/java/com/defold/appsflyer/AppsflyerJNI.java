@@ -22,12 +22,20 @@ public class AppsflyerJNI {
     private static final int CONVERSION_DATA_FAIL = 2;
 
     private Activity activity;
+    private boolean isInitialized;
+    private boolean debugLogEnabled;
 
     public AppsflyerJNI(Activity activity) {
         this.activity = activity;
+        this.isInitialized = false;
+        this.debugLogEnabled = false;
     }
 
     public void initializeSDK(final String key) {
+        if (isInitialized) {
+            Log.d(TAG, "Initialize SDK skipped: already initialized");
+            return;
+        }
         Log.d(TAG, "Initialize SDK");
         AppsFlyerConversionListener conversionDataListener =
                 new AppsFlyerConversionListener() {
@@ -71,16 +79,25 @@ public class AppsflyerJNI {
                     }
                 };
         AppsFlyerLib.getInstance().init(key, conversionDataListener, activity.getApplicationContext());
+        AppsFlyerLib.getInstance().setDebugLog(debugLogEnabled);
+        isInitialized = true;
     }
 
     public void startSDK() {
+        if (!isInitialized) {
+            Log.d(TAG, "Start SDK skipped: initializeSDK not called yet");
+            return;
+        }
         Log.d(TAG, "Start SDK");
         AppsFlyerLib.getInstance().start(activity);
     }
 
     public void setDebugLog(boolean is_enable) {
+        debugLogEnabled = is_enable;
         Log.d(TAG, "Set debug log: " + String.valueOf(is_enable));
-        AppsFlyerLib.getInstance().setDebugLog(is_enable);
+        if (isInitialized) {
+            AppsFlyerLib.getInstance().setDebugLog(is_enable);
+        }
     }
 
     public void logEvent(String eventName, Map<String, Object> eventValue) {
